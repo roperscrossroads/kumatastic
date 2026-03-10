@@ -1,0 +1,18 @@
+# Snippet to add to ~/.mmrelay/config.yaml
+# Use this instead of a standalone collector when running meshtastic-matrix-relay.
+#
+# Install: pipx inject mmrelay /path/to/kumatastic
+# Plugin:  cp kumatastic/mmrelay_plugin.py ~/.mmrelay/plugins/custom/kumatastic/plugin.py
+
+custom-plugins:
+  kumatastic:
+    active: true
+    state_path: "/var/lib/kumatastic/state.json"
+    collector_id: "mmrelay-1"
+    neighbor_max_age: 14400
+    manifest_path: "https://raw.githubusercontent.com/you/repo/main/nodes.yaml"
+
+    # Forward sightings to pushers
+    pusher_urls:
+      - "http://localhost:9100"
+    sighting_token: "your-sighting-token-here"

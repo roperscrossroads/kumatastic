@@ -1,0 +1,3 @@
+# /etc/cron.d/kumatastic-sync
+# Sync monitors and status page every 30 minutes (create missing, delete orphans)
+*/30 * * * * root /usr/local/bin/kumatastic sync --config /etc/kumatastic/kumatastic-pusher.yaml >> /var/log/kumatastic-sync.log 2>&1

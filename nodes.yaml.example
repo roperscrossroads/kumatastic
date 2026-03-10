@@ -1,0 +1,28 @@
+# Kumatastic Node Manifest
+#
+# Single source of truth for monitored nodes. Only nodes listed here
+# are collected and pushed to Uptime Kuma.
+#
+# Copy to nodes.yaml or host on a URL (auto-reloads every 30 min).
+
+nodes:
+  # Core infrastructure
+  "!aabbccdd":
+    name: "Base Station Alpha"
+    tags: ["core"]
+
+  "!11223344":
+    name: "Hilltop Repeater"
+    tags: ["infra"]
+
+  "!deadbeef":
+    name: "Solar Relay South"
+    tags: ["infra"]
+
+  # Community nodes
+  "!cafebabe":
+    name: "Mobile Unit 1"
+    tags: ["mobile"]
+
+  "!f00dcafe":
+    name: "Home Node 7"

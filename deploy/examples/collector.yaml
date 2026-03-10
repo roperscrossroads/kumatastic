@@ -1,0 +1,18 @@
+# Example collector config
+# Copy to /etc/kumatastic/kumatastic-collector.yaml
+
+collector:
+  id: "gateway-1"
+  meshtastic: "tcp:192.168.1.100:4403"
+  state_path: "/var/lib/kumatastic/state.json"
+  neighbor_max_age: 14400
+  manifest_path: "https://raw.githubusercontent.com/you/repo/main/nodes.yaml"
+
+  # Forward sightings to pushers on other hosts
+  pusher_urls:
+    - "http://localhost:9100"
+    - "https://remote-pusher.example.com"
+
+  # Auth token for sighting POSTs (must match pusher's sighting_token)
+  # Can also use env var KUMATASTIC_SIGHTING_TOKEN or the systemd Environment= directive
+  sighting_token: "your-sighting-token-here"

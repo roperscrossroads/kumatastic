@@ -1,0 +1,15 @@
+[Unit]
+Description=Kumatastic Collector (gateway-1)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/kumatastic collect --config /etc/kumatastic/kumatastic-collector.yaml
+Restart=always
+RestartSec=30
+
+# Optional: pass sighting token via environment instead of config file
+# Environment=KUMATASTIC_SIGHTING_TOKEN=your-token-here
+
+[Install]
+WantedBy=multi-user.target

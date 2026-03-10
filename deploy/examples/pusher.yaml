@@ -1,0 +1,29 @@
+# Example pusher config
+# Copy to /etc/kumatastic/kumatastic-pusher.yaml
+
+pusher:
+  listen: "0.0.0.0:9100"
+  sighting_token: "your-sighting-token-here"
+  state_path: "/var/lib/kumatastic/state.json"
+  offline_threshold: 23400
+  push_interval: 600
+  request_timeout: 10
+  maxretries: 6
+  monitor_interval_multiplier: 6
+  monitor_retry_multiplier: 3
+  manifest_path: "https://raw.githubusercontent.com/you/repo/main/nodes.yaml"
+
+  # Shared secret for distributed mode (all pushers must use the same value)
+  # Enables deterministic push tokens and UP-only push
+  push_secret: "your-shared-secret-here"
+
+  targets:
+    - name: "internal"
+      url: "http://kuma-internal:3001"
+      username: "admin"
+      password: "your-password-here"
+
+    - name: "public"
+      url: "https://kuma-public.example.com"
+      username: "admin"
+      password: "your-password-here"

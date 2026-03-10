@@ -1,0 +1,12 @@
+[Unit]
+Description=Kumatastic Pusher
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/kumatastic -v push --config /etc/kumatastic/kumatastic-pusher.yaml
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

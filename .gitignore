@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+uv.lock
+
+# State files
+*.json.tmp
+state.json
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.mcp.json
+.venv/
+venv/
+
+# Config files with secrets (use kumatastic.yaml.example as template)
+INFRA.md
+kumatastic.yaml
+nodes.yaml
+
+# OS
+.DS_Store

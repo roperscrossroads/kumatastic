@@ -1,0 +1,137 @@
+# Kumatastic Configuration Example
+#
+# This file configures the collector and pusher components.
+# Copy to one of:
+#   - ./kumatastic.yaml (current directory)
+#   - ~/.config/kumatastic/kumatastic.yaml (user config)
+#   - /etc/kumatastic/kumatastic.yaml (system config)
+
+# Collector configuration
+# The collector connects to a Meshtastic device and writes sightings to the state store.
+collector:
+  # Unique identifier for this collector instance
+  # Used to track which collector reported each sighting
+  id: "collector-1"
+
+  # Meshtastic connection string
+  # Formats:
+  #   tcp:hostname:port  - TCP connection (default port 4403)
+  #   tcp:hostname       - TCP connection with default port
+  #   serial:/dev/ttyUSB0 - Serial connection
+  #   /dev/ttyUSB0       - Serial connection (auto-detected)
+  meshtastic: "tcp:192.168.1.100:4403"
+
+  # Path to the state file (shared with pusher)
+  state_path: "/var/lib/kumatastic/state.json"
+
+  # How long to keep neighbor sightings (seconds)
+  # NeighborInfo packets arrive roughly once per hour
+  neighbor_max_age: 14400  # 4 hours
+
+  # Path or URL to the node manifest (declares which nodes to track)
+  # File paths are read once at startup.
+  # URLs (http:// or https://) are fetched at startup and auto-reload every 30 minutes.
+  # manifest_path: "https://raw.githubusercontent.com/you/repo/main/nodes.yaml"
+  manifest_path: "nodes.yaml"
+
+  # Remote pusher URLs to forward sightings to (optional)
+  # The collector POSTs each sighting to these URLs (fire-and-forget)
+  # pusher_urls:
+  #   - "http://localhost:9100"
+  #   - "https://remote-pusher.example.com:9100"
+
+  # Bearer token for authenticating sighting POSTs (optional)
+  # Can also be set via env var: KUMATASTIC_SIGHTING_TOKEN
+  # sighting_token: "your-sighting-token-here"
+
+
+# Pusher configuration
+# The pusher reads from the state store and pushes status to Uptime Kuma instances.
+pusher:
+  # Path to the state file (should match collector)
+  state_path: "/var/lib/kumatastic/state.json"
+
+  # HTTP sighting server: accept sightings from remote collectors (optional)
+  # Format: "host:port" — start with `kumatastic push` or `kumatastic push --listen 0.0.0.0:9100`
+  # listen: "0.0.0.0:9100"
+
+  # Bearer token for authenticating incoming sightings (optional)
+  # Must match the sighting_token configured on collectors
+  # Can also be set via env var: KUMATASTIC_SIGHTING_TOKEN
+  # sighting_token: "your-sighting-token-here"
+
+  # How long since last seen before node is considered offline (seconds)
+  # Set high enough to avoid false DOWNs from mesh timing variability
+  offline_threshold: 23400  # 6.5 hours
+
+  # How often to push status updates (seconds)
+  push_interval: 600  # 10 minutes
+
+  # HTTP/Socket.io request timeout (seconds)
+  request_timeout: 10
+
+  # Shared secret for distributed push mode (optional)
+  # When set, all pushers with the same secret derive identical push tokens
+  # for each node, enabling multiple independent collector+pusher stacks to
+  # push to the same Kuma monitors. Only UP is pushed; Kuma's timer handles DOWN.
+  # Can also be set via env var: KUMATASTIC_SECRET
+  # push_secret: "your-shared-secret-here"
+
+  # Kuma monitor settings
+  # maxretries: How many beats can be missed before Kuma marks the monitor DOWN
+  # monitor_interval_multiplier: monitor interval = push_interval * this (prevents flapping)
+  # monitor_retry_multiplier: retry interval = push_interval * this
+  maxretries: 6
+  monitor_interval_multiplier: 6
+  monitor_retry_multiplier: 3
+
+  # Path or URL to the node manifest (same format as collector.manifest_path)
+  # manifest_path: "https://raw.githubusercontent.com/you/repo/main/nodes.yaml"
+  manifest_path: "nodes.yaml"
+
+  # Uptime Kuma targets
+  # All targets push the same manifest nodes
+  targets:
+    - name: "internal"
+      url: "http://kuma-internal:3001"
+      username: "admin"
+      password: "your-password-here"
+      default_tag: "auto"
+
+    - name: "public"
+      url: "http://kuma-public:3001"
+      username: "admin"
+      password: "your-password-here"
+      default_tag: "stable"
+
+
+# Example systemd service files:
+#
+# /etc/systemd/system/kumatastic-collector.service:
+# [Unit]
+# Description=Kumatastic Meshtastic Collector
+# After=network.target
+#
+# [Service]
+# Type=simple
+# ExecStart=/usr/local/bin/kumatastic collect --config /etc/kumatastic/kumatastic.yaml
+# Restart=always
+# RestartSec=10
+#
+# [Install]
+# WantedBy=multi-user.target
+#
+#
+# /etc/systemd/system/kumatastic-pusher.service:
+# [Unit]
+# Description=Kumatastic Uptime Kuma Pusher
+# After=network.target
+#
+# [Service]
+# Type=simple
+# ExecStart=/usr/local/bin/kumatastic push --config /etc/kumatastic/kumatastic.yaml
+# Restart=always
+# RestartSec=10
+#
+# [Install]
+# WantedBy=multi-user.target
