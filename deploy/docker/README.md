@@ -29,11 +29,28 @@ docker compose logs -f
 docker compose run --rm pusher status
 ```
 
-Want a throwaway Kuma to point at while testing?
+### Throwaway Kuma for testing
+
+Don't have a Kuma to point at? Bring up a bundled one (Uptime Kuma **2.4.0**,
+pinned) and target it from `kumatastic.yaml` (`url: http://uptime-kuma:3001`):
 
 ```bash
 docker compose --profile kuma up -d         # adds uptime-kuma on :3001
 ```
+
+The compose pre-seeds `db-config.json` so it skips the Kuma 2.x "Setup Database"
+wizard, but you still **create the admin account once** — open
+<http://localhost:3001> and set a username/password that match the `username`/
+`password` in your `kumatastic.yaml`. Only then can the pusher log in:
+
+```bash
+docker compose run --rm pusher init --target kuma   # now succeeds
+```
+
+> **Kuma version matters.** kumatastic uses the Uptime Kuma **2.x** monitor
+> schema, so the bundled Kuma is pinned to a 2.x tag. A **1.x** Kuma rejects
+> every monitor with `table monitor has no column named conditions`. Point at a
+> 2.x instance (2.0.x–2.4.x all work).
 
 ## Files
 
@@ -42,6 +59,7 @@ docker compose --profile kuma up -d         # adds uptime-kuma on :3001
 | `docker-compose.yml` | collector + pusher (+ optional Kuma) sharing a `state` volume |
 | `.env.example` | `KUMATASTIC_SECRET` / `KUMATASTIC_SIGHTING_TOKEN` — copy to `.env` |
 | `kumatastic.yaml.example` | app config — copy to `kumatastic.yaml` |
+| `kuma-db-config.json` | pre-selects SQLite so the bundled Kuma 2.x skips its setup wizard |
 
 `kumatastic.yaml` and `nodes.yaml` are bind-mounted read-only at
 `/etc/kumatastic/`. State is a named volume at `/var/lib/kumatastic`, shared by

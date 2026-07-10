@@ -53,14 +53,26 @@ services:
       - state:/var/lib/kumatastic
 
   # Optional: a local Uptime Kuma to push to. Enable with `--profile kuma`.
+  #
+  # Pinned to 2.x on purpose: kumatastic creates monitors with the Uptime Kuma
+  # 2.x schema (the `conditions` column, kafka_* fields), so a 1.x image rejects
+  # every monitor with "table monitor has no column named conditions".
+  #
+  # A fresh Kuma 2.x boots into a "Setup Database" wizard and serves only the
+  # web UI (no Socket.io) until a backend is chosen — so `init` can't connect.
+  # The mounted db-config.json pre-selects SQLite and skips the wizard headlessly.
+  # You still create the admin account once (see deploy/docker/README.md).
   uptime-kuma:
-    image: louislam/uptime-kuma:1
+    image: louislam/uptime-kuma:2.4.0
     profiles: ["kuma"]
     restart: unless-stopped
+    environment:
+      UPTIME_KUMA_ENABLE_EMBEDDED_MARIADB: "1"
     ports:
       - "3001:3001"
     volumes:
       - kuma:/app/data
+      - ./kuma-db-config.json:/app/data/db-config.json:ro
 
 volumes:
   state:
