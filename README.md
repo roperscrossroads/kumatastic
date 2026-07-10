@@ -32,74 +32,32 @@ Monitor your Meshtastic nodes from multiple collectors. Each collector connects 
 
 ## Quick Start
 
-### 1. Install
+The fast path is **Docker** — pull the prebuilt multi-arch image, no build:
 
 ```bash
-pip install -e ".[all]"
+git clone https://github.com/roperscrossroads/kumatastic
+cd kumatastic/deploy/docker
+./bootstrap.sh --with-kuma      # seeds config files, then (on re-run) pulls + starts
 ```
 
-Or minimal: `pip install -e .` and add `meshtastic` or `python-socketio[client]` as needed.
-
-### 2. Define your nodes
-
-```yaml
-# nodes.yaml — only these nodes will be monitored
-nodes:
-  "!aabbccdd":
-    name: "Base Station Alpha"
-    tags: ["core"]
-  "!11223344":
-    name: "Hilltop Repeater"
-    tags: ["infra"]
-```
-
-### 3. Configure
-
-```yaml
-# kumatastic.yaml
-collector:
-  id: "collector-1"
-  meshtastic: "tcp:192.168.1.100:4403"
-  state_path: "/var/lib/kumatastic/state.json"
-  manifest_path: "nodes.yaml"
-
-pusher:
-  state_path: "/var/lib/kumatastic/state.json"
-  manifest_path: "nodes.yaml"
-  targets:
-    - name: "kuma"
-      url: "http://localhost:3001"
-      username: "admin"
-      password: "your-password"
-```
-
-See [Configuration Reference](docs/configuration.md) for all options.
-
-### 4. Run
+`bootstrap.sh` copies the example configs and tells you what to edit — your radio
+and Kuma URL in `kumatastic.yaml`, the nodes to watch in `nodes.yaml`. Re-run it
+to pull the image and start the stack, then create the monitors once:
 
 ```bash
-# Create monitors on Kuma (once)
-kumatastic init --target kuma
-
-# Start collector and pusher
-kumatastic collect &
-kumatastic push &
-
-# Check status
-kumatastic status
+docker compose run --rm pusher init --target kuma
 ```
 
-### 5. Keep in sync
+`--with-kuma` even bundles a throwaway Uptime Kuma to point at while you try it.
 
-```bash
-kumatastic sync
-```
+**→ Full walkthrough, secrets, and options: [Docker deployment guide](deploy/docker/README.md).**
 
-Creates monitors for new nodes, deletes orphans, and updates the status page. Run from cron every 30 minutes:
+> **Uptime Kuma 2.x required** — kumatastic uses the 2.x monitor schema; a 1.x
+> Kuma rejects monitors with `table monitor has no column named conditions`.
 
-```
-*/30 * * * * root /usr/local/bin/kumatastic sync --config /etc/kumatastic/kumatastic.yaml
-```
+**Other ways to run:** [systemd / bare-metal](deploy/systemd/README.md) (e.g. a
+USB-serial radio), or as an [mmrelay plugin](docs/configuration.md#mmrelay-plugin-configuration)
+if you already run meshtastic-matrix-relay.
 
 ## CLI
 
@@ -121,8 +79,8 @@ The simplest setup is one collector and one pusher on the same host. For product
 ```
   Host A                          Host B
  ┌────────────────────┐          ┌────────────────────┐
- │ Collector (gw 1)   │─ POST ─►│ Pusher 2           │
- │ Collector (gw 2)   │─ /sighting ─►│  → Kuma A     │
+ │ Collector (radio 1)│─ POST ─►│ Pusher 2           │
+ │ Collector (radio 2)│─ /sighting ─►│  → Kuma A     │
  │ Pusher 1           │         │  → Kuma B          │
  │   → Kuma A         │         └────────────────────┘
  │   → Kuma B         │
@@ -133,27 +91,6 @@ In **distributed mode** (`push_secret`), all pushers derive identical push token
 
 See [Architecture](docs/architecture.md) for details on topologies, data flow, and design decisions.
 
-## Deployment
-
-**Docker (recommended)** — pull the prebuilt multi-arch image, no build:
-
-```bash
-cd deploy/docker
-./bootstrap.sh          # seeds configs, then `docker compose pull` + `up -d`
-# edit the configs it creates, re-run, then:
-docker compose run --rm pusher init --target kuma   # create monitors (once)
-```
-
-`./bootstrap.sh --with-kuma` also brings up a throwaway Uptime Kuma to test
-against. See the [Docker guide](deploy/docker/README.md) for details.
-
-> **Uptime Kuma 2.x required** — kumatastic uses the 2.x monitor schema; a 1.x
-> Kuma rejects monitors with `table monitor has no column named conditions`.
-
-**Bare-metal / USB-serial radios:** the [systemd path](deploy/systemd/README.md).
-Already running meshtastic-matrix-relay? A collector can run as an
-[mmrelay plugin](docs/configuration.md#mmrelay-plugin-configuration) instead.
-
 ## Documentation
 
 | Doc | Description |
@@ -162,7 +99,7 @@ Already running meshtastic-matrix-relay? A collector can run as an
 | [Architecture](docs/architecture.md) | Components, topologies, data flow, design decisions |
 | [Tuning Guide](docs/tuning.md) | Threshold tuning, common patterns, troubleshooting |
 | [Docker Guide](deploy/docker/README.md) | Container images, compose, secrets |
-| [Deployment Guide](deploy/README.md) | systemd setup, secrets, multi-user permissions |
+| [systemd Guide](deploy/systemd/README.md) | Bare-metal install, secrets, multi-user permissions |
 
 ## Development
 
