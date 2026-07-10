@@ -72,6 +72,20 @@ docker compose run --rm pusher init --target kuma   # now succeeds
 `/etc/kumatastic/`. State is a named volume at `/var/lib/kumatastic`, shared by
 both containers and pre-owned by uid 1000 so writes succeed.
 
+
+## Secrets
+
+Set these in `.env`; they override the matching keys in `kumatastic.yaml` so
+you can keep secrets out of the mounted config.
+
+- **`KUMATASTIC_SECRET`** — shared secret for *distributed push*. Share this
+  with another operator so their pusher reports to the **same Kuma monitors**.
+- **`KUMATASTIC_SIGHTING_TOKEN`** — bearer token for *collector → pusher* HTTP
+  forwarding. Only needed when a collector forwards sightings to a remote pusher.
+
+See [Configuration → Secrets](../../docs/configuration.md#secrets-which-one-do-i-share)
+for the full explanation of the difference.
+
 ## Building the image
 
 The **published** image at `ghcr.io/roperscrossroads/kumatastic` is a multi-arch
@@ -108,19 +122,6 @@ docker buildx build --platform linux/arm64 -t kumatastic:arm64 --load .
 docker buildx build --platform linux/amd64,linux/arm64 \
     -t ghcr.io/roperscrossroads/kumatastic:latest --push .
 ```
-
-## Secrets
-
-Set these in `.env`; they override the matching keys in `kumatastic.yaml` so
-you can keep secrets out of the mounted config.
-
-- **`KUMATASTIC_SECRET`** — shared secret for *distributed push*. Share this
-  with another operator so their pusher reports to the **same Kuma monitors**.
-- **`KUMATASTIC_SIGHTING_TOKEN`** — bearer token for *collector → pusher* HTTP
-  forwarding. Only needed when a collector forwards sightings to a remote pusher.
-
-See [Configuration → Secrets](../../docs/configuration.md#secrets-which-one-do-i-share)
-for the full explanation of the difference.
 
 ## Notes & limitations
 
