@@ -135,20 +135,24 @@ See [Architecture](docs/architecture.md) for details on topologies, data flow, a
 
 ## Deployment
 
-**Docker (recommended):**
+**Docker (recommended)** — pull the prebuilt multi-arch image, no build:
 
 ```bash
 cd deploy/docker
-cp .env.example .env                        # secrets (optional)
-cp kumatastic.yaml.example kumatastic.yaml  # Kuma URL + credentials
-cp ../../nodes.yaml.example nodes.yaml      # your nodes
-docker compose up -d --build
+./bootstrap.sh          # seeds configs, then `docker compose pull` + `up -d`
+# edit the configs it creates, re-run, then:
 docker compose run --rm pusher init --target kuma   # create monitors (once)
 ```
 
-See the [Docker guide](deploy/docker/README.md) for details, or [`deploy/`](deploy/) for the **systemd** path (units, example configs, cron jobs).
+`./bootstrap.sh --with-kuma` also brings up a throwaway Uptime Kuma to test
+against. See the [Docker guide](deploy/docker/README.md) for details.
 
-The [mmrelay plugin](docs/configuration.md#mmrelay-plugin-configuration) can be used instead of a standalone collector if you're already running meshtastic-matrix-relay.
+> **Uptime Kuma 2.x required** — kumatastic uses the 2.x monitor schema; a 1.x
+> Kuma rejects monitors with `table monitor has no column named conditions`.
+
+**Bare-metal / USB-serial radios:** the [systemd path](deploy/systemd/README.md).
+Already running meshtastic-matrix-relay? A collector can run as an
+[mmrelay plugin](docs/configuration.md#mmrelay-plugin-configuration) instead.
 
 ## Documentation
 

@@ -1,25 +1,32 @@
 # Docker Deployment
 
-Run kumatastic as containers. This is the recommended path for most setups; for
-bare-metal / systemd see [`../README.md`](../README.md).
-
-The image is built from a Wolfi **distroless** base
-(`ghcr.io/roperscrossroads/python`, Python 3.13, runs as non-root uid 1000).
-Collector and pusher run as separate containers sharing one state volume.
+Run kumatastic as containers — the fast path for most setups. The image is a
+prebuilt, multi-arch (amd64 + arm64) Wolfi **distroless** build published to
+`ghcr.io/roperscrossroads/kumatastic`, so you **pull, don't build**. Collector
+and pusher run as separate containers sharing one state volume. For bare-metal /
+systemd see [`../systemd/README.md`](../systemd/README.md).
 
 ## Quick start (single host)
 
 ```bash
 cd deploy/docker
+./bootstrap.sh          # seeds config files (first run), then pulls + starts the stack
+```
 
-cp .env.example .env                        # add secrets (optional)
-cp kumatastic.yaml.example kumatastic.yaml  # set Kuma URL + credentials
-cp ../../nodes.yaml.example nodes.yaml      # declare which nodes to monitor
+`bootstrap.sh` copies the three example configs, tells you what to edit, and on
+the next run does `docker compose pull` + `up -d`. Add `--with-kuma` to also spin
+up a throwaway Uptime Kuma for testing. To do it by hand instead:
 
-docker compose up -d --build                # build image + start collector/pusher
+```bash
+cp .env.example .env                        # secrets (optional)
+cp kumatastic.yaml.example kumatastic.yaml  # set Kuma URL + credentials + radio
+cp ../../nodes.yaml.example nodes.yaml      # which nodes to monitor
+# ...edit those three...
 
-# One-time: create the monitors on Kuma
-docker compose run --rm pusher init --target kuma
+docker compose pull                         # fetch the published image (no build)
+docker compose up -d                        # start collector + pusher
+
+docker compose run --rm pusher init --target kuma   # create the monitors (once)
 ```
 
 Check it's working:
