@@ -49,6 +49,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
+          # $GITHUB_PATH only affects *subsequent* steps; export onto PATH now
+          # too so the self-check at the end of THIS step can find the binaries.
+          export PATH="$HOME/.local/bin:$PATH"
           # uv (release asset ships a .sha256 sidecar)
           d="$(mktemp -d)"; cd "$d"
           curl -fsSLO "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
