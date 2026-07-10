@@ -1,0 +1,43 @@
+# Kumatastic config for the docker compose deployment.
+# Copy to kumatastic.yaml and edit. Mounted read-only at
+# /etc/kumatastic/kumatastic.yaml (the default config search path).
+#
+# Secrets (push_secret / sighting_token) are read from the environment via
+# .env, so they are intentionally omitted here. See .env.example.
+
+collector:
+  id: "docker-1"
+  # Radios are reached over the network from inside the container. Point this
+  # at your radio or an MQTT/TCP gateway. For a USB serial radio, use
+  # "serial:/dev/ttyUSB0" and pass the device through in docker-compose.yml.
+  meshtastic: "tcp:192.168.1.100:4403"
+  state_path: "/var/lib/kumatastic/state.json"
+  manifest_path: "/etc/kumatastic/nodes.yaml"
+  neighbor_max_age: 14400
+  # To forward sightings to a pusher on another host instead of (or in addition
+  # to) the local one, list its URL here. sighting_token comes from the env.
+  # pusher_urls:
+  #   - "https://remote-pusher.example.com:9100"
+
+pusher:
+  state_path: "/var/lib/kumatastic/state.json"
+  manifest_path: "/etc/kumatastic/nodes.yaml"
+  offline_threshold: 23400   # 6.5h before a node is reported DOWN
+  push_interval: 600         # push cycle every 10 min
+
+  # Accept sightings from remote collectors (published on port 9100 in compose).
+  # sighting_token is read from the env (KUMATASTIC_SIGHTING_TOKEN).
+  listen: "0.0.0.0:9100"
+
+  # push_secret is read from the env (KUMATASTIC_SECRET). Set it in .env to
+  # enable distributed mode and share it with any other operator that should
+  # feed these same Kuma monitors.
+
+  targets:
+    - name: "kuma"
+      # From inside compose, a bundled Kuma (--profile kuma) is "http://uptime-kuma:3001".
+      # For an external Kuma, use its reachable URL.
+      url: "http://uptime-kuma:3001"
+      username: "admin"
+      password: "change-me"
+      default_tag: "auto"

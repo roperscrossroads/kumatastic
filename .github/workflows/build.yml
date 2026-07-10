@@ -1,0 +1,146 @@
+name: build & publish image
+
+# Builds the multi-arch (amd64 + arm64) kumatastic image and pushes it to GHCR.
+#
+# Runs on the cluster's GitHub ARC runner (label `kumatastic-arc`), which is
+# non-privileged with no Docker daemon — so we do NOT `docker build`. Instead we
+# follow the house apko/crane pattern (see github.com/roperscrossroads/images):
+# take the multi-arch Wolfi base ghcr.io/roperscrossroads/python, layer the pip
+# deps onto it with crane, and assemble a multi-arch index. No emulation: the
+# per-arch dependency wheels are cross-downloaded on the amd64 runner (uv
+# --python-platform), so no arm64 code ever executes here.
+#
+# Local dev still uses the Dockerfile via `docker compose up --build`.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    # NB: a v* release tag must sit on a commit that also touches one of these
+    # paths (a version bump in pyproject.toml does) or the paths filter skips it.
+    paths:
+      - "kumatastic/**"
+      - "pyproject.toml"
+      - ".github/workflows/build.yml"
+  schedule:
+    - cron: "27 6 * * *"   # nightly — pick up base-image CVE fixes within hours
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write          # push to ghcr.io/roperscrossroads/*
+
+env:
+  GHCR: ghcr.io/roperscrossroads
+  IMAGE: kumatastic
+  BASE: ghcr.io/roperscrossroads/python
+  PYTHON_VERSION: "3.13"
+  UV_VERSION: "0.11.28"
+  CRANE_VERSION: "0.21.7"
+  TRIVY_VERSION: "0.71.2"
+
+jobs:
+  build:
+    runs-on: kumatastic-arc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv + crane (pinned + checksum-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          # uv (release asset ships a .sha256 sidecar)
+          d="$(mktemp -d)"; cd "$d"
+          curl -fsSLO "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSLO "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz.sha256"
+          sha256sum -c uv-x86_64-unknown-linux-gnu.tar.gz.sha256
+          tar xzf uv-x86_64-unknown-linux-gnu.tar.gz
+          install -m0755 uv-x86_64-unknown-linux-gnu/uv "$HOME/.local/bin/uv"
+          # crane (release ships a checksums.txt)
+          d="$(mktemp -d)"; cd "$d"
+          curl -fsSLO "https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz"
+          curl -fsSLO "https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}/checksums.txt"
+          grep "  go-containerregistry_Linux_x86_64.tar.gz\$" checksums.txt | sha256sum -c -
+          tar xzf go-containerregistry_Linux_x86_64.tar.gz crane
+          install -m0755 crane "$HOME/.local/bin/crane"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          uv --version && crane version
+
+      - name: Compute tags
+        id: tags
+        run: |
+          set -euo pipefail
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          # On a v* tag push, publish the bare semver too.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            echo "semver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: GHCR auth
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Hand-write the auth (username/password fields, not a base64 auth
+          # string) to match the images repo — crane reads ~/.docker/config.json.
+          mkdir -p "$HOME/.docker"
+          cat > "$HOME/.docker/config.json" <<JSON
+          {"auths":{"ghcr.io":{"username":"${GITHUB_ACTOR}","password":"${GHCR_TOKEN}"}}}
+          JSON
+
+      - name: Ensure a Python 3.13 for uv's install layout
+        run: uv python install "${PYTHON_VERSION}"
+
+      - name: Build wheel (arch-independent, pure py3-none-any)
+        run: uv build --wheel --out-dir dist
+
+      - name: Layer deps per arch, append onto base, assemble multi-arch index
+        run: |
+          set -euo pipefail
+          IMG="${GHCR}/${IMAGE}"
+          # Pin the base by digest for a reproducible build within this run.
+          BASE_REF="${BASE}@$(crane digest ${BASE}:latest)"
+          echo "base: ${BASE_REF}"
+
+          declare -A TRIPLE=( [amd64]=x86_64-unknown-linux-gnu [arm64]=aarch64-unknown-linux-gnu )
+          DATE="${{ steps.tags.outputs.date }}"
+
+          for arch in amd64 arm64; do
+            t="${TRIPLE[$arch]}"
+            rm -rf "layer-$arch"
+            # Cross-download wheels for the target arch (no execution) into a
+            # prefix layer. --prefix .../usr -> /usr/lib/python3.13/site-packages
+            # (the base interpreter's purelib). The two named deps ARE
+            # pyproject.toml's [all] extra — keep them in sync.
+            uv pip install --prefix "layer-$arch/usr" \
+              --python-version "${PYTHON_VERSION}" --python-platform "$t" --only-binary=:all: \
+              dist/kumatastic-*.whl meshtastic "python-socketio[client]"
+            # Pre-own the state dir for the base's nonroot uid 1000.
+            mkdir -p "layer-$arch/var/lib/kumatastic"
+            tar --owner=1000 --group=1000 -C "layer-$arch" -czf "app-$arch.tar.gz" usr var
+
+            crane append --platform "linux/$arch" -b "${BASE_REF}" \
+              -f "app-$arch.tar.gz" -t "${IMG}:${DATE}-${arch}"
+            crane mutate "${IMG}:${DATE}-${arch}" \
+              --entrypoint=/usr/bin/python3.13,-m,kumatastic --cmd=--help --user=1000 \
+              --label org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY} \
+              --label org.opencontainers.image.revision=${GITHUB_SHA} \
+              --label org.opencontainers.image.version=${DATE}
+          done
+
+          # Combine the per-arch manifests into one multi-arch index, then tag.
+          crane index append -t "${IMG}:${DATE}" \
+            -m "${IMG}:${DATE}-amd64" -m "${IMG}:${DATE}-arm64"
+          crane tag "${IMG}:${DATE}" latest
+          SEMVER="${{ steps.tags.outputs.semver }}"
+          if [ -n "${SEMVER}" ]; then crane tag "${IMG}:${DATE}" "${SEMVER}"; fi
+          echo "published ${IMG}:${DATE} -> $(crane digest ${IMG}:${DATE})"
+
+      - name: Scan (Trivy — report-only)
+        run: |
+          set -euo pipefail
+          cd "$(mktemp -d)"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
+          ./trivy image --quiet --severity HIGH,CRITICAL --no-progress \
+            "${GHCR}/${IMAGE}:${{ steps.tags.outputs.date }}" || true

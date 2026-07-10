@@ -1,0 +1,40 @@
+# VCS / CI
+.git
+.github
+.gitignore
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+uv.lock
+
+# Tests and docs are not needed to build the package
+tests/
+docs/
+deploy/
+
+# Local config / secrets / state (never bake into an image)
+.env
+*.env
+kumatastic.yaml
+nodes.yaml
+state.json
+*.json.tmp
+INFRA.md
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# NOTE: README.md is intentionally NOT ignored — pyproject.toml references it
+# as the long-description and pip reads it during the build.

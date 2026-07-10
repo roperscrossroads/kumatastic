@@ -1,0 +1,67 @@
+# Kumatastic — single-host Docker deployment.
+#
+# Collector and pusher run as separate containers sharing one state volume
+# (the same collector/pusher split as the bare-metal setup). Secrets come from
+# .env; the config and manifest are bind-mounted read-only.
+#
+# Setup:
+#   cp .env.example .env                       # then edit
+#   cp kumatastic.yaml.example kumatastic.yaml  # then edit (Kuma URL, creds)
+#   cp ../../nodes.yaml.example nodes.yaml      # then edit (your nodes)
+#   docker compose up -d --build
+#
+# Optional local Uptime Kuma for testing:
+#   docker compose --profile kuma up -d
+
+name: kumatastic
+
+x-kumatastic-image: &kumatastic-image
+  image: ghcr.io/roperscrossroads/kumatastic:latest
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+    # Override the runtime base if needed:
+    # args:
+    #   BASE_IMAGE: ghcr.io/roperscrossroads/python:latest
+
+services:
+  collector:
+    <<: *kumatastic-image
+    command: ["-v", "collect"]
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./kumatastic.yaml:/etc/kumatastic/kumatastic.yaml:ro
+      - ./nodes.yaml:/etc/kumatastic/nodes.yaml:ro
+      - state:/var/lib/kumatastic
+    # A radio reached over the network (meshtastic: "tcp:host:4403") needs
+    # nothing extra. For a USB-serial radio, pass the device through and set
+    # meshtastic: "serial:/dev/ttyUSB0" in kumatastic.yaml:
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0
+
+  pusher:
+    <<: *kumatastic-image
+    command: ["-v", "push"]
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "9100:9100"   # HTTP sighting server (pusher.listen), for remote collectors
+    volumes:
+      - ./kumatastic.yaml:/etc/kumatastic/kumatastic.yaml:ro
+      - ./nodes.yaml:/etc/kumatastic/nodes.yaml:ro
+      - state:/var/lib/kumatastic
+
+  # Optional: a local Uptime Kuma to push to. Enable with `--profile kuma`.
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    profiles: ["kuma"]
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - kuma:/app/data
+
+volumes:
+  state:
+  kuma:
