@@ -164,6 +164,11 @@ Multiple collectors on different radios forward sightings to multiple pushers, e
 - If ALL pushers stop → Kuma's dead-man-switch timer marks the node DOWN
 - No single point of failure for UP detection
 
+**Collector-only:** Host C above runs just `collect` with `pusher_urls` set and **no
+`pusher:` config** — a radio contributing sightings to a Kuma it doesn't own. It needs the
+pusher's `sighting_token` and the same `manifest_path`. See the
+[Docker guide → Collector-only](../deploy/docker/README.md#collector-only-feed-a-remote-pusher).
+
 ## Data Flow
 
 ```

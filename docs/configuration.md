@@ -70,6 +70,12 @@ nodes:
 
 ## Collector Configuration
 
+> **Collector-only is valid.** A config with just a `collector:` section works —
+> `kumatastic collect` never reads `pusher:`. Point `pusher_urls` at a remote pusher to
+> contribute a radio to a Kuma you don't run (you'll need that pusher's `sighting_token`
+> and its `manifest_path`). Practical recipe:
+> [Docker guide → Collector-only](../deploy/docker/README.md#collector-only-feed-a-remote-pusher).
+
 ```yaml
 collector:
   id: "collector-north"                  # Unique collector identifier

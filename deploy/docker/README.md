@@ -59,6 +59,61 @@ docker compose run --rm pusher init --target kuma   # now succeeds
 > every monitor with `table monitor has no column named conditions`. Point at a
 > 2.x instance (2.0.x–2.4.x all work).
 
+## Collector-only (feed a remote pusher)
+
+You don't have to run a pusher at all. A collector can read a radio and forward its
+sightings over HTTP to *someone else's* pusher — the operator who owns the Uptime Kuma.
+This is "Host C" in the
+[many-to-many topology](../../docs/architecture.md#many-to-many-distributed-push): a radio
+contributing to a Kuma you don't run.
+
+The `collector` and `pusher` compose services are independent (no `depends_on`), so just
+start the collector:
+
+```bash
+docker compose up -d collector        # the pusher never starts
+```
+
+Or run it standalone, no compose — the one-liner to hand a remote contributor:
+
+```bash
+docker run -d --name kumatastic-collector --restart unless-stopped \
+  -v ./kumatastic.yaml:/etc/kumatastic/kumatastic.yaml:ro \
+  ghcr.io/roperscrossroads/kumatastic:latest -v collect
+```
+
+Your `kumatastic.yaml` needs **only** a `collector:` section — `collect` never reads
+`pusher:`:
+
+```yaml
+collector:
+  id: "my-radio"                        # unique name for your collector
+  meshtastic: "tcp:192.168.1.50:4403"   # your radio (TCP or serial)
+  manifest_path: "https://…/nodes.yaml" # the SAME manifest the remote pusher uses
+  pusher_urls:
+    - "https://remote-pusher.example.com:9100"
+  sighting_token: "…"                   # or set KUMATASTIC_SIGHTING_TOKEN in .env
+```
+
+Three things the remote pusher's operator must give you:
+
+1. **their pusher URL** → `pusher_urls`,
+2. **the `sighting_token`** it expects (bearer auth on `POST /sighting` — see
+   [Secrets](../../docs/configuration.md#secrets-which-one-do-i-share)),
+3. **their manifest URL** → `manifest_path`, so your node set matches theirs (a collector
+   only records/forwards nodes that are in its manifest).
+
+Notes:
+
+- **`--network host`** is only needed if the radio is on `localhost`; a `tcp:host:4403`
+  radio elsewhere on your LAN works on the default bridge network.
+- **No state volume is required** for a pure forwarder — the collector still keeps a local
+  `state.json` inside the container, but nothing else reads it, so it's fine to let it be
+  ephemeral. Add `-v state:/var/lib/kumatastic` only if you want that record to survive
+  restarts.
+- With a **URL manifest** (above) you don't mount `nodes.yaml` at all. Use a local file +
+  `-v ./nodes.yaml:/etc/kumatastic/nodes.yaml:ro` only if you're not sharing the pusher's URL.
+
 ## Files
 
 | File | Purpose |
