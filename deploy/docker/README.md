@@ -61,11 +61,11 @@ docker compose run --rm pusher init --target kuma   # now succeeds
 
 ## Collector-only (feed a remote pusher)
 
-You don't have to run a pusher at all. A collector can read a radio and forward its
-sightings over HTTP to *someone else's* pusher — the operator who owns the Uptime Kuma.
-This is "Host C" in the
+The collector runs independently of the pusher. Set `pusher_urls` and it reads its radio,
+filters against the manifest, and forwards each sighting over HTTP (`POST /sighting`) to a
+pusher on another host — no local pusher required. This is "Host C" in the
 [many-to-many topology](../../docs/architecture.md#many-to-many-distributed-push): a radio
-contributing to a Kuma you don't run.
+feeding a Kuma instance hosted elsewhere.
 
 The `collector` and `pusher` compose services are independent (no `depends_on`), so just
 start the collector:

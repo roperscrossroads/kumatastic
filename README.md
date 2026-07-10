@@ -89,7 +89,7 @@ The simplest setup is one collector and one pusher on the same host. For product
 
 In **distributed mode** (`push_secret`), all pushers derive identical push tokens per node using HMAC-SHA256. Only UP is pushed — Kuma's dead-man-switch timer handles DOWN. No coordination needed between hosts.
 
-A collector can also run **on its own**, forwarding sightings to a remote pusher over HTTP — contribute a radio to someone else's Uptime Kuma without running any pusher yourself. See [Docker guide → Collector-only](deploy/docker/README.md#collector-only-feed-a-remote-pusher).
+A collector also runs **independently** of the pusher — set `pusher_urls` and it forwards sightings over HTTP to a pusher on another host, feeding a Kuma instance it doesn't run locally. See [Docker guide → Collector-only](deploy/docker/README.md#collector-only-feed-a-remote-pusher).
 
 See [Architecture](docs/architecture.md) for details on topologies, data flow, and design decisions.
 
