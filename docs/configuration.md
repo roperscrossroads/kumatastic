@@ -19,6 +19,35 @@ See `kumatastic.yaml.example` for a fully annotated template.
 | `KUMATASTIC_SIGHTING_TOKEN` | Bearer token for HTTP sighting auth (overrides config file) |
 | `KUMATASTIC_SECRET` | Shared secret for distributed push mode (overrides config file) |
 
+## Secrets: which one do I share?
+
+Kumatastic has two shared secrets. They sound similar but do completely
+different jobs, so it's worth being clear about which is which.
+
+| | `sighting_token` / `KUMATASTIC_SIGHTING_TOKEN` | `push_secret` / `KUMATASTIC_SECRET` |
+|---|---|---|
+| **What it is** | Bearer token on the `POST /sighting` HTTP endpoint | Shared secret used to derive Kuma push tokens (HMAC-SHA256) |
+| **What it protects** | Collector → pusher sighting forwarding | Which Kuma monitors a pusher writes to |
+| **Who shares it** | A collector and the pusher it forwards to | Every pusher that should feed the **same Kuma instance** |
+| **Enables** | Authenticated cross-host sighting ingest | Distributed push mode (deterministic tokens, UP-only push) |
+| **If blank** | Sighting endpoint accepts unauthenticated POSTs | Single-instance mode (tokens discovered via Socket.io) |
+
+**If someone wants to feed the same Uptime Kuma instance, share
+`push_secret` (`KUMATASTIC_SECRET`).** Because each node's Kuma push token is
+`HMAC-SHA256(push_secret, node_id)`, every pusher holding the same secret
+derives the same token per node and therefore writes to the *same monitors* —
+no coordination needed. If instead they only run a *collector* that forwards
+sightings to your pusher over HTTP, they need your `sighting_token`, and your
+pusher does the actual Kuma pushing.
+
+> **Security:** anyone with `push_secret` can push arbitrary UP/DOWN status for
+> any node in your manifest — share it only with operators you trust to
+> co-report the mesh. A blank `sighting_token` leaves the sighting endpoint
+> open, so set one whenever `listen` is exposed beyond localhost.
+
+See [Architecture → Push modes](architecture.md#pusher-pusherpy) for how
+distributed mode uses these tokens.
+
 ## Manifest (`nodes.yaml`)
 
 The manifest declares which nodes to monitor. It can be a local file path or a URL.

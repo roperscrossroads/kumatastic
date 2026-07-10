@@ -1,8 +1,16 @@
 # Deployment
 
-Example configuration files for deploying kumatastic with systemd.
+Two supported paths:
 
-## Quick Setup
+- **[Docker](docker/README.md)** — recommended for most setups. Prebuilt
+  distroless image, `docker compose up`, secrets via `.env`.
+- **systemd** (below) — for bare-metal installs or USB-serial radios where a
+  container adds friction.
+
+Both use the same collector/pusher model and the same
+[config options](../docs/configuration.md).
+
+## systemd Quick Setup
 
 ```bash
 # 1. Install
@@ -37,12 +45,17 @@ sudo cp deploy/examples/kumatastic-sync.cron /etc/cron.d/kumatastic-sync
 ## Generating Secrets
 
 ```bash
-# Sighting token (shared between collectors and pushers)
+# sighting_token — collector -> pusher HTTP auth (share between a collector
+# and the pusher it forwards to)
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
-# Push secret (shared between all pushers for distributed mode)
+# push_secret — distributed push (share with every pusher that should feed the
+# SAME Kuma instance)
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
+
+The two secrets do different jobs — see
+[Configuration → Secrets: which one do I share?](../docs/configuration.md#secrets-which-one-do-i-share).
 
 ## Multi-User State File Access
 

@@ -135,7 +135,18 @@ See [Architecture](docs/architecture.md) for details on topologies, data flow, a
 
 ## Deployment
 
-See [`deploy/`](deploy/) for systemd units, example configs, cron jobs, and a step-by-step setup guide.
+**Docker (recommended):**
+
+```bash
+cd deploy/docker
+cp .env.example .env                        # secrets (optional)
+cp kumatastic.yaml.example kumatastic.yaml  # Kuma URL + credentials
+cp ../../nodes.yaml.example nodes.yaml      # your nodes
+docker compose up -d --build
+docker compose run --rm pusher init --target kuma   # create monitors (once)
+```
+
+See the [Docker guide](deploy/docker/README.md) for details, or [`deploy/`](deploy/) for the **systemd** path (units, example configs, cron jobs).
 
 The [mmrelay plugin](docs/configuration.md#mmrelay-plugin-configuration) can be used instead of a standalone collector if you're already running meshtastic-matrix-relay.
 
@@ -146,6 +157,7 @@ The [mmrelay plugin](docs/configuration.md#mmrelay-plugin-configuration) can be 
 | [Configuration Reference](docs/configuration.md) | All config options, env vars, manifest format |
 | [Architecture](docs/architecture.md) | Components, topologies, data flow, design decisions |
 | [Tuning Guide](docs/tuning.md) | Threshold tuning, common patterns, troubleshooting |
+| [Docker Guide](deploy/docker/README.md) | Container images, compose, secrets |
 | [Deployment Guide](deploy/README.md) | systemd setup, secrets, multi-user permissions |
 
 ## Development
