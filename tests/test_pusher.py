@@ -315,6 +315,46 @@ class TestDistributedPush:
         assert len(result.up) == 1
         assert len(result.down) == 1
 
+    def test_single_instance_loads_monitors_before_loop_no_duplicate(self) -> None:
+        """Regression (issue #1): push_cycle must load the monitor list before
+        iterating nodes. Otherwise the first node runs against an unconnected
+        client (empty map), misses its existing monitor, and creates a duplicate
+        every cycle."""
+        store = MemoryStore()
+        store.update_sighting(NodeSighting("!node1", time.time() - 100, "c1", name="Online"))
+
+        config = PusherConfig(
+            offline_threshold=3600,
+            push_interval=600,
+            push_secret="",  # single-instance mode
+            targets=[KumaTarget(name="t", url="http://kuma:3001", username="admin", password="pw")],
+        )
+        manifest = make_manifest("!node1")
+        pusher = KumaPusher(store, config, manifest=manifest)
+
+        conn = pusher._connections["t"]
+        # Fresh connection: monitor map is empty until connect() loads it, exactly
+        # like a real first push. connect() populates the map (as _refresh_monitors
+        # does) and returns True.
+        existing = MonitorInfo(monitor_id=1, push_token="mesh-node1-tok", name="Online")
+
+        def fake_connect() -> bool:
+            conn._node_monitors = {"!node1": existing}
+            return True
+
+        conn.connect = MagicMock(side_effect=fake_connect)
+        conn.create_monitor = MagicMock()
+
+        with patch("requests.get") as mock_get:
+            mock_get.return_value = MagicMock(raise_for_status=MagicMock())
+            pusher.push_cycle()
+
+        # It connected before the loop, found the existing monitor, and did NOT
+        # create a duplicate.
+        conn.connect.assert_called_once()
+        conn.create_monitor.assert_not_called()
+        assert mock_get.call_count == 1
+
 
 class TestKumaConnection:
     """Tests for KumaConnection (mocked)."""

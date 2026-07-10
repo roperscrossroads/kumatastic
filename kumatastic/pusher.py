@@ -90,6 +90,11 @@ class KumaConnection:
         self._monitors: dict[int, dict[str, Any]] = {}
         self._created_tags: set[str] = set()
 
+        # Set by the async `monitorList` event handler so `_refresh_monitors`
+        # can wait for the list to actually arrive (Kuma 2.x delivers it out of
+        # band) instead of racing a fixed sleep.
+        self._monitor_list_ready = threading.Event()
+
         # Local tracking: node_id -> MonitorInfo
         self._node_monitors: dict[str, MonitorInfo] = {}
 
@@ -122,6 +127,7 @@ class KumaConnection:
             def _on_monitor_list(data: Any) -> None:
                 if isinstance(data, dict):
                     self._monitors = data
+                    self._monitor_list_ready.set()
                     logger.debug(f"Received monitorList: {len(data)} monitors")
 
             # Connect
@@ -181,16 +187,26 @@ class KumaConnection:
             return
 
         try:
+            # Ask Kuma to (re)send the monitor list. Kuma 1.x returns the list
+            # directly in the reply; 2.x replies {ok: true} and delivers the
+            # list asynchronously via the `monitorList` event. Clear the ready
+            # flag first so we wait for the response to THIS request, not a
+            # stale event, then block until it actually arrives.
+            self._monitor_list_ready.clear()
             response = self._sio.call(
                 "getMonitorList",
                 timeout=self.config.request_timeout,
             )
-            # Kuma 1.x returns dict directly, 2.x returns {ok: true}
             if isinstance(response, dict) and "ok" not in response:
+                # Kuma 1.x: list returned inline.
                 self._monitors = response
-            elif isinstance(response, dict) and response.get("ok"):
-                # Kuma 2.x sends via event
-                time.sleep(0.5)
+            elif not self._monitor_list_ready.wait(timeout=self.config.request_timeout):
+                # Kuma 2.x: event never landed. Keep whatever we already have
+                # (e.g. the login-time list) rather than build from nothing.
+                logger.warning(
+                    "monitorList event did not arrive within timeout; "
+                    "monitor map may be incomplete"
+                )
 
             logger.debug(f"Refreshed {len(self._monitors)} monitors")
 
@@ -775,6 +791,17 @@ class KumaPusher:
             result = PushResult()
 
             logger.debug(f"Target {target_name}: {len(nodes)} nodes to push (distributed={distributed})")
+
+            # Single-instance mode reuses/creates monitors over Socket.io, so the
+            # monitor list must be loaded BEFORE the node loop. Otherwise the first
+            # node races an as-yet-unconnected client (empty monitor map), doesn't
+            # find its existing monitor, and creates a duplicate every cycle. Only
+            # force a connect when the list hasn't been loaded yet; connect() is
+            # idempotent and refreshes the monitor list on first use.
+            if not distributed and not conn._node_monitors and not conn.connect():
+                logger.warning(f"Target {target_name}: not connected; skipping this cycle")
+                results[target_name] = result
+                continue
 
             for node_id, node in nodes.items():
                 # Use manifest name as authoritative, fall back to state name
