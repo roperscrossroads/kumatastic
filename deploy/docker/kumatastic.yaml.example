@@ -8,7 +8,7 @@
 collector:
   id: "docker-1"
   # Radios are reached over the network from inside the container. Point this
-  # at your radio or an MQTT/TCP gateway. For a USB serial radio, use
+  # at your radio or a TCP/MQTT bridge. For a USB serial radio, use
   # "serial:/dev/ttyUSB0" and pass the device through in docker-compose.yml.
   meshtastic: "tcp:192.168.1.100:4403"
   state_path: "/var/lib/kumatastic/state.json"

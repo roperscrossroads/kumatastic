@@ -72,7 +72,7 @@ nodes:
 
 ```yaml
 collector:
-  id: "gateway-north"                    # Unique collector identifier
+  id: "collector-north"                  # Unique collector identifier
   meshtastic: "tcp:192.168.1.100:4403"   # TCP or serial connection
   state_path: "/var/lib/kumatastic/state.json"
   manifest_path: "nodes.yaml"            # File path or URL

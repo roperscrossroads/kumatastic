@@ -2,7 +2,7 @@
 # Copy to /etc/kumatastic/kumatastic-collector.yaml
 
 collector:
-  id: "gateway-1"
+  id: "collector-1"
   meshtastic: "tcp:192.168.1.100:4403"
   state_path: "/var/lib/kumatastic/state.json"
   neighbor_max_age: 14400

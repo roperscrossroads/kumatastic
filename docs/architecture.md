@@ -16,7 +16,7 @@ Kumatastic uses a **decoupled collector/pusher architecture**. Collectors observ
 │   COLLECTOR(S)  │     │   STATE STORE   │     │   PUSHER(S)     │
 │                 │     │                 │     │                 │
 │ Meshtastic ─────┼────►│ JSON (local)    │────►│ Kuma instance   │
-│ Gateway         │──┐  │                 │  ┌──│ (one or many)   │
+│ Radio           │──┐  │                 │  ┌──│ (one or many)   │
 └─────────────────┘  │  └─────────────────┘  │  └─────────────────┘
                      │  POST /sighting (HTTP) │
                      └───────────────────────►│
@@ -138,11 +138,11 @@ The simplest setup. One collector and one pusher share a state file on the same 
 
 ### Many-to-Many (Distributed Push)
 
-Multiple collectors on different gateways forward sightings to multiple pushers, each pushing to multiple Kuma instances. All pushers use the same `push_secret` to derive identical tokens.
+Multiple collectors on different radios forward sightings to multiple pushers, each pushing to multiple Kuma instances. All pushers use the same `push_secret` to derive identical tokens.
 
 ```
 ┌── Host A ──────────────────┐     ┌── Host B ──────────────────┐
-│ Collector (gateway 1)      │     │ Pusher 2                   │
+│ Collector (radio 1)        │     │ Pusher 2                   │
 │   ↓ state.json             │────►│   listen: 0.0.0.0:9100     │
 │ Pusher 1                   │     │   ↓ state.json             │
 │   listen: 0.0.0.0:9100     │     │   → Kuma A (push)          │
@@ -152,7 +152,7 @@ Multiple collectors on different gateways forward sightings to multiple pushers,
          ▲
          │ POST /sighting
 ┌── Host C ──────────────────┐
-│ Collector (gateway 2)      │
+│ Collector (radio 2)        │
 │   ↓ state.json             │
 │   (no local pusher)        │
 └────────────────────────────┘

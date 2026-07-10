@@ -2,20 +2,20 @@
 
 **Meshtastic mesh network monitoring with [Uptime Kuma](https://github.com/louislam/uptime-kuma).**
 
-Monitor your Meshtastic nodes from multiple gateways. If any gateway sees a node, it's UP.
+Monitor your Meshtastic nodes from multiple collectors. Each collector connects to one Meshtastic radio; if any collector has heard a node recently, it's UP.
 
 ```
   Meshtastic              Kumatastic             Uptime Kuma
- ┌──────────┐         ┌────────────────┐       ┌───────────┐
- │ Gateway A │──┐      │                │       │           │
- └──────────┘  ├─────►│  Collector(s)  │       │  Status   │
- ┌──────────┐  │      │       ↓        │       │  Page     │
- │ Gateway B │──┘      │  State Store   │──────►│           │
- └──────────┘         │       ↓        │       │  !node1 ✓ │
- ┌──────────┐         │   Pusher(s)    │       │  !node2 ✓ │
- │ Gateway C │────────►│               │       │  !node3 ✗ │
- │ (mmrelay) │         └────────────────┘       └───────────┘
- └──────────┘
+ ┌─────────┐          ┌────────────────┐       ┌───────────┐
+ │ Radio A │──┐       │                │       │           │
+ └─────────┘  ├──────►│  Collector(s)  │       │  Status   │
+ ┌─────────┐  │       │       ↓        │       │  Page     │
+ │ Radio B │──┘       │  State Store   │──────►│           │
+ └─────────┘          │       ↓        │       │  !node1 ✓ │
+ ┌─────────┐          │   Pusher(s)    │       │  !node2 ✓ │
+ │ Radio C │─────────►│                │       │  !node3 ✗ │
+ │(mmrelay)│          └────────────────┘       └───────────┘
+ └─────────┘
 ```
 
 **How it works:** Collectors connect to Meshtastic radios and record node sightings. Pushers read the sightings and report UP/DOWN status to Uptime Kuma. A shared node manifest (`nodes.yaml`) controls which nodes are tracked.
@@ -24,7 +24,7 @@ Monitor your Meshtastic nodes from multiple gateways. If any gateway sees a node
 
 **Key features:**
 - Multiple collectors merge visibility — no single point of observation
-- HTTP sighting forwarding between hosts for cross-gateway awareness
+- HTTP sighting forwarding between hosts for cross-collector awareness
 - Push to multiple Kuma instances (internal dashboard, public status page, etc.)
 - Auto-reconnects on connection loss with exponential backoff
 - Scales from a single Raspberry Pi to a distributed multi-host setup
@@ -58,7 +58,7 @@ nodes:
 ```yaml
 # kumatastic.yaml
 collector:
-  id: "gateway-1"
+  id: "collector-1"
   meshtastic: "tcp:192.168.1.100:4403"
   state_path: "/var/lib/kumatastic/state.json"
   manifest_path: "nodes.yaml"
