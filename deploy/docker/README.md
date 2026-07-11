@@ -178,6 +178,34 @@ docker buildx build --platform linux/amd64,linux/arm64 \
     -t ghcr.io/roperscrossroads/kumatastic:latest --push .
 ```
 
+## 32-bit ARM (ARMv7) — older / smaller Pis
+
+The multi-arch `kumatastic` image above covers **amd64 + arm64** only. A
+**Raspberry Pi Zero 2 W, Pi 2, or Pi 3 running a 32-bit OS** is ARMv7, which the
+Wolfi base can't target (Wolfi is 64-bit only). For those there is a **separate
+image**, published weekly:
+
+```bash
+docker pull ghcr.io/roperscrossroads/kumatastic-arm32:latest
+```
+
+It is a deliberately distinct name, **not** another arch under the `kumatastic:`
+tag — it's built on a Debian-glibc base (`ghcr.io/roperscrossroads/python-arm32`)
+with piwheels for the armv7 `cryptography`/`protobuf` wheels, so it has a shell
++ different CVE surface. To use it in compose, override the image:
+
+```yaml
+services:
+  collector:
+    image: ghcr.io/roperscrossroads/kumatastic-arm32:latest
+```
+
+CI: [`.github/workflows/build-arm32.yml`](../../.github/workflows/build-arm32.yml)
+(weekly, `docker buildx` + QEMU on a hosted runner, ghcr-only). Local build:
+`docker buildx build --platform linux/arm/v7 -f Dockerfile.arm32 --load .` (needs
+binfmt/QEMU registered). **Running a 64-bit OS on your Pi 3/4/5? Use the normal
+`kumatastic` image — arm64 is faster and better-supported.**
+
 ## Notes & limitations
 
 - **Serial radios:** the example uses a network radio (`tcp:host:4403`). For a
