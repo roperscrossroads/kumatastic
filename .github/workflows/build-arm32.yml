@@ -1,0 +1,166 @@
+name: build & publish arm32 image
+
+# 32-bit ARM (ARMv7) kumatastic for low-end Raspberry Pis (Zero 2 W, Pi 2, Pi 3).
+#
+# SEPARATE from build.yml on purpose. build.yml layers deps onto the Wolfi
+# distroless base with crane (64-bit only, no emulation) on the cluster ARC
+# runner. Wolfi has no 32-bit target, so this variant builds FROM our
+# Debian-glibc `python-arm32` base with `docker buildx` under QEMU emulation,
+# and publishes a DIFFERENT image name (kumatastic-arm32) — never folded into
+# the `kumatastic:` tag. See Dockerfile.arm32.
+#
+# RUNNER: GitHub-hosted `ubuntu-latest`. QEMU binfmt registration is privileged,
+# and the `kumatastic-arc` runner is unprivileged with no Docker daemon — so
+# this path runs on a hosted runner and is GHCR-ONLY (no internal mirror push).
+#
+# WEEKLY, not nightly: the emulated build is slow and 32-bit consumers move
+# slowly, so a weekly rebuild keeps the CVE window reasonable without burning
+# hosted-runner minutes. (build.yml stays nightly for the fast crane path.)
+
+on:
+  schedule:
+    - cron: "47 6 * * 1"        # weekly, Mondays ~06:47 UTC (after python-arm32's 06:37)
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "kumatastic/**"
+      - "pyproject.toml"
+      - "Dockerfile.arm32"
+      - ".github/workflows/build-arm32.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write              # push to ghcr.io/roperscrossroads/*
+
+env:
+  GHCR: "ghcr.io/roperscrossroads"
+  IMAGE: "kumatastic-arm32"
+  BASE: "ghcr.io/roperscrossroads/python-arm32"
+  TRIVY_VERSION: "0.71.2"
+  # Add linux/arm/v6 here when a Pi Zero / Pi 1 variant lands — buildx will emit
+  # a single multi-arch manifest and each Pi pulls the arch it can run.
+  PLATFORMS: "linux/arm/v7"
+  # QEMU emulator installer, PINNED BY DIGEST (bump via renovate). The base image
+  # is our own python-arm32 and is resolved to its :latest digest at build time
+  # below, so kumatastic-arm32 auto-picks up base CVE fixes each weekly run.
+  BINFMT_IMAGE: "tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0"
+  # How many recent image versions the prune job keeps. At weekly cadence, 5 ≈ 5 weeks.
+  KEEP_VERSIONS: "5"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Compute tags
+        id: tags
+        run: |
+          set -euo pipefail
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          # On a v* tag push, publish the bare semver too.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            echo "semver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve base digest (python-arm32:latest)
+        id: base
+        run: |
+          set -euo pipefail
+          # python-arm32 is a public package; anonymous read is fine. Pin the
+          # base by digest for a reproducible build within this run, while still
+          # tracking :latest (unlike a static renovate pin).
+          digest="$(docker buildx imagetools inspect "${BASE}:latest" \
+            --format '{{.Manifest.Digest}}')"
+          echo "ref=${BASE}@${digest}" >> "$GITHUB_OUTPUT"
+          echo "base: ${BASE}@${digest}"
+
+      - name: Register QEMU (binfmt) for arm emulation
+        run: docker run --privileged --rm "${BINFMT_IMAGE}" --install arm
+
+      - name: Buildx builder (docker-container driver — required to --push a --platform build)
+        run: |
+          set -euo pipefail
+          docker buildx create --name arm32 --driver docker-container --use 2>/dev/null \
+            || docker buildx use arm32
+          docker buildx inspect --bootstrap
+
+      - name: Registry auth (ghcr)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.docker"
+          # username/password fields, NOT a base64 `auth` string (matches build.yml).
+          cat > "$HOME/.docker/config.json" <<JSON
+          {"auths":{
+            "ghcr.io":{"username":"${GITHUB_ACTOR}","password":"${GHCR_TOKEN}"}
+          }}
+          JSON
+
+      - name: Build + push (buildx -> ghcr)
+        run: |
+          set -euo pipefail
+          t="${{ steps.tags.outputs.date }}"
+          extra=""
+          semver="${{ steps.tags.outputs.semver }}"
+          if [ -n "${semver}" ]; then extra="-t ${GHCR}/${IMAGE}:${semver}"; fi
+          # --provenance/--sbom off for now to keep a single clean manifest;
+          # enabling buildx SBOM attestation is a follow-up (matches python-arm32).
+          docker buildx build \
+            --platform "${PLATFORMS}" \
+            --build-arg BASE_IMAGE="${{ steps.base.outputs.ref }}" \
+            --provenance=false --sbom=false \
+            --label org.opencontainers.image.revision="${GITHUB_SHA}" \
+            --label org.opencontainers.image.version="${t}" \
+            -t "${GHCR}/${IMAGE}:${t}" -t "${GHCR}/${IMAGE}:latest" ${extra} \
+            --push \
+            -f Dockerfile.arm32 .
+
+      - name: Scan (Trivy — report-only for now)
+        run: |
+          set -euo pipefail
+          cd "$(mktemp -d)"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar xzf "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" trivy
+          # report-only (|| true); Trivy inspects the arm/v7 manifest without
+          # executing it, so scanning from an amd64 runner is fine.
+          ./trivy image --quiet --severity HIGH,CRITICAL --no-progress \
+            "${GHCR}/${IMAGE}:${{ steps.tags.outputs.date }}" || true
+
+  # Prune old versions so GHCR storage stays bounded. Every build publishes a new
+  # version (digest); moving :latest leaves the old one behind as an untagged
+  # version. This deletes all but the newest KEEP_VERSIONS.
+  #
+  # NEEDS A PAT: kumatastic-arm32 is a USER-owned GHCR package, and the ephemeral
+  # GITHUB_TOKEN cannot delete user-scoped package versions. Provide a classic PAT
+  # with `delete:packages` (+ `read:packages`) as the `GHCR_CLEANUP_TOKEN` secret.
+  # The job SKIPS cleanly when that secret is absent, so builds never break on it.
+  prune:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Delete old package versions (keep newest KEEP_VERSIONS)
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_CLEANUP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "GHCR_CLEANUP_TOKEN not set — skipping prune (add a PAT with delete:packages to enable)."
+            exit 0
+          fi
+          keep="${KEEP_VERSIONS}"
+          ids="$(gh api --paginate \
+            "/user/packages/container/${IMAGE}/versions?per_page=100" \
+            --jq '.[].id' | tail -n +"$((keep + 1))")"
+          if [ -z "$ids" ]; then
+            echo "Nothing to prune (<= ${keep} versions)."
+            exit 0
+          fi
+          for id in $ids; do
+            echo "Deleting version id=${id}"
+            gh api -X DELETE "/user/packages/container/${IMAGE}/versions/${id}"
+          done
