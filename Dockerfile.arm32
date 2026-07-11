@@ -1,0 +1,59 @@
+# syntax=docker/dockerfile:1
+#
+# 32-bit ARM (ARMv7) build of kumatastic for low-end Raspberry Pis —
+# Zero 2 W, Pi 2, Pi 3 in 32-bit mode. Published as
+# ghcr.io/roperscrossroads/kumatastic-arm32 (a SEPARATE name from the
+# multi-arch amd64/arm64 `kumatastic` image — see the "why" below).
+#
+# WHY THIS IS SEPARATE FROM the main Dockerfile / build.yml:
+#   The main image is layered onto the Wolfi distroless `python` base with
+#   crane (no emulation). Wolfi is 64-bit only, so there is no 32-bit ARM
+#   path through it. This variant instead builds FROM our Debian-glibc
+#   `python-arm32` base (itself FROM python:3.13-slim-bookworm), which has a
+#   real shell + pip, so we `pip install` directly here instead of the crane
+#   copy-onto-distroless dance. It runs under QEMU emulation on a hosted
+#   runner. Different base OS + shell present + different CVE surface = it
+#   must never be folded under the `kumatastic:` tag as "just another arch".
+#
+# WHY glibc / piwheels:
+#   meshtastic pulls in protobuf and cryptography, which have NO armv7
+#   manylinux wheels on PyPI. piwheels publishes prebuilt armhf (glibc)
+#   wheels for them, so a Debian base + piwheels dodges building Rust/C from
+#   source under emulation. Hence --extra-index-url piwheels below.
+
+ARG BASE_IMAGE=ghcr.io/roperscrossroads/python-arm32:latest
+FROM ${BASE_IMAGE}
+
+# The base runs as uid 1000 with no pip write access to /usr/local; switch to
+# root just for the install, then drop back.
+USER root
+
+COPY . /src
+WORKDIR /src
+
+# ".[all]" pulls meshtastic (collector) and python-socketio (pusher
+# single-instance discovery) — keep in sync with pyproject.toml's [all] extra.
+# --extra-index-url (not --index-url): PyPI stays primary, piwheels only fills
+# the armv7 wheels PyPI lacks (cryptography, protobuf).
+RUN pip install --no-cache-dir \
+      --extra-index-url https://www.piwheels.org/simple \
+      ".[all]"
+
+# Drop the build context and pre-own the state dir for the runtime uid, so a
+# fresh named volume mounted at /var/lib/kumatastic inherits the right owner.
+WORKDIR /
+RUN rm -rf /src \
+    && install -d -o 1000 -g 1000 /var/lib/kumatastic
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+LABEL org.opencontainers.image.source="https://github.com/roperscrossroads/kumatastic" \
+      org.opencontainers.image.description="32-bit ARM (ARMv7) kumatastic — Debian glibc, piwheels-compatible. Not distroless."
+
+# CPython lives under /usr/local in the base (unlike the Wolfi /usr/bin path
+# the main image uses). Launch the CLI module; compose `command:` supplies the
+# subcommand.
+USER 1000
+ENTRYPOINT ["/usr/local/bin/python3.13", "-m", "kumatastic"]
+CMD ["--help"]
